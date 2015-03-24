@@ -9,6 +9,11 @@ local file_logger = require("inc.resty.logger.file")
 local socket_logger = require("inc.resty.logger.socket")
 local upload = require("resty.upload")
 
+local ok, new_tab = pcall(require, "table.new")
+if not ok or type(new_tab) ~= "function" then
+    new_tab = function (narr, nrec) return {} end
+end
+
 local mt = { __index = _M }
 
 -- module-level cache of aho-corasick dictionary objects
@@ -222,15 +227,12 @@ local function _parse_collection(self, collection, opts)
 			return _table_values(self, collection)
 		end,
 		all = function(self, collection)
-			local n = 0
-			local _collection = {}
-			for _, key in ipairs(_table_keys(self, collection)) do
-				n = n + 1
-				_collection[n] = key
-			end
-			for _, value in ipairs(_table_values(self, collection)) do
-				n = n + 1
-				_collection[n] = value
+			local n = 1
+			local _collection = new_tab(#collection*2,0)
+			for k, v in pairs(collection) do
+				_collection[n] = tostring(k)
+                _collection[n + 1] = tostring(v)
+                n = n + 2
 			end
 			return _collection
 		end
