@@ -89,7 +89,7 @@ end
 
 -- return a table containing the keys of the provided table
 local function _table_keys(self, table)
-	local t = {}
+	local t = new_tab(#table,0)
 	local n = 0
 
 	for key, _ in pairs(table) do
@@ -102,7 +102,7 @@ end
 
 -- return a table containing the values of the provided table
 local function _table_values(self, table)
-	local t = {}
+	local t = new_tab(#table,0)
 	local n = 0
 
 	for _, value in pairs(table) do
