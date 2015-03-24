@@ -250,10 +250,10 @@ local function _parse_collection(self, collection, opts)
 end
 
 -- return a single table from multiple tables containing request data
-local function _build_common_args(self, collections)
+local function _build_common_args(self, ...)
 	local t = {}
 
-	for _, collection in pairs(collections) do
+	for _, collection in ipairs(...) do
 		if (collection ~= nil) then
 			for k, v in pairs(collection) do
 				if (t[k] == nil) then
@@ -748,7 +748,7 @@ function _M.exec(self)
 	local request_post_args = _parse_request_body(self, request_headers)
 	local cookies = cookiejar:new()
 	local request_cookies, cookie_err = cookies:get_all()
-	local request_common_args = _build_common_args(self, { request_uri_args, request_post_args, request_cookies })
+	local request_common_args = _build_common_args(self, request_uri_args, request_post_args, request_cookies)
 
 	local ctx = {}
 	ctx.start = start
