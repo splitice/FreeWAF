@@ -122,15 +122,6 @@ local function _table_values(self, table)
 	return t
 end
 
--- return true if the table key exists
-local function _table_has_key(self, needle, haystack)
-	if (type(haystack) ~= "table") then
-		_fatal_fail("Cannot search for a needle when haystack is type " .. type(haystack))
-	end
-	_log(self, "table key " .. needle .. " is " .. tostring(haystack[needle]))
-	return haystack[needle] ~= nil
-end
-
 -- determine if the haystack table has a needle for a key
 local function _table_has_value(self, needle, haystack)
 	_log(self, "Searching for " .. needle)
@@ -788,7 +779,7 @@ function _M.exec(self)
 		local rs = require("FreeWAF.rules." .. ruleset)
 
 		for __, rule in ipairs(rs.rules()) do
-			if (not _table_has_key(self, rule.id, self._ignored_rules)) then
+			if (self._ignored_rules[rule.id] == nil) then
 				_log(self, "Beginning run of rule " .. rule.id)
 				_process_rule(self, rule, collections, ctx)
 			else
