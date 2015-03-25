@@ -164,11 +164,10 @@ local function _ac_lookup(self, needle, haystack, ctx)
 	-- dictionary creation is expensive, so we use the id of
 	-- the rule as the key to cache the created dictionary 
 	if (not _ac_dicts[id]) then
-		_log(self, "AC dict not found, calling libac.so")
+		_log(self, "AC dict " .. id .. " not found, creating using libac.so")
 		_ac = ac.create_ac(haystack)
 		_ac_dicts[id] = _ac
 	else
-		_log(self, "AC dict found, pulling from the module cache")
 		_ac = _ac_dicts[id]
 	end
 
@@ -177,36 +176,31 @@ local function _ac_lookup(self, needle, haystack, ctx)
 		for _, v in ipairs(needle) do
 			match = _ac_lookup(self, v, haystack, ctx)
 			if (match) then
-				break
+				return match
 			end
-		end
-	else
-		match = ac.match(_ac, needle)
+        end
+        return match
 	end
 
-	return match
+	return ac.match(_ac, needle)
 end
 
 -- get a subset or superset of request data collection
 local function _parse_collection(self, collection, opts)
 	local lookup = {
 		specific = function(self, collection, value)
-			_log(self, "_parse_collection is getting a specific value: " .. value)
 			return collection[value]
 		end,
 		ignore = function(self, collection, value)
-			_log(self, "_parse_collection is ignoring a value: " .. value)
 			local _collection = {}
 			_collection = _table_copy(self, collection)
 			_collection[value] = nil
 			return _collection
 		end,
 		keys = function(self, collection)
-			_log(self, "_parse_collection is getting the keys")
 			return _table_keys(self, collection)
 		end,
 		values = function(self, collection)
-			_log(self, "_parse_collection is getting the values")
 			return _table_values(self, collection)
 		end,
 		all = function(self, collection)
@@ -229,6 +223,7 @@ local function _parse_collection(self, collection, opts)
 		return collection
 	end
 
+    _log(self, "_parse_collection is using " .. opts.key .. "method") -- log the value?
 	return lookup[opts.key](self, collection, opts.value)
 end
 
@@ -380,9 +375,8 @@ local function _set_var(self, ctx, collections)
 		end
 	end
 
-	_log(self, "actually setting " .. key .. " to " .. value)
+	_log(self, "actually setting " .. key .. " to " .. value .. "expiring in " .. expire)
 
-	_log(self, "expiring in " .. expire)
 	local ok = shm:safe_set(key, value, expire)
 	if (not ok) then
 		ngx.log(ngx.WARN, "Could not add key to persistent storage, increase the size of the lua_shared_dict " .. self._storage_zone)
