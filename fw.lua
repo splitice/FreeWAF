@@ -40,36 +40,31 @@ end
 
 -- used for operators.EQUALS
 local function _equals(self, a, b)
-	local equals
 	if (type(a) == "table") then
 		for _, v in ipairs(a) do
-			equals = _equals(self, v, b)
-			if (equals) then
-				break
+			if (a == b) then
+				return true
 			end
 		end
-	else
-		equals = a == b
+        return false
 	end
 
-	return equals
+	return a == b
 end
 
 -- used for operators.GREATER
 local function _greater(self, a, b)
-	local greater
 	if (type(a) == "table") then
 		for _, v in ipairs(a) do
-			greater = _greater(self, v, b)
-			if (greater) then
-				break
+			if (a > b) then
+				return true
 			end
-		end
-	else
-		greater = a > b
+        end
+
+        return false
 	end
 
-	return greater
+	return a > b
 end
 
 -- duplicate a table using recursion if necessary for multi-dimensional tables
