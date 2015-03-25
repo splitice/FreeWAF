@@ -21,8 +21,9 @@ local _ac_dicts = {}
 
 -- debug logger
 local function _log(self, msg)
-	if (self._debug == true) then
-		ngx.log(self._debug_log_level, msg)
+    local options = self.options
+	if (options._debug == true) then
+		ngx.log(options._debug_log_level, msg)
 	end
 end
 
@@ -152,7 +153,7 @@ local function _regex_match(self, subject, pattern, opts)
         return match
     end
 
-    local from, to, err = ngx.re.find(subject, pattern, self._pcre_flags)
+    local from, to, err = ngx.re.find(subject, pattern, self.options._pcre_flags)
     if err then ngx.log(ngx.WARN, "error in waf.regexmatch: " .. err) end
     if from then
         match = string.sub(subject, from, to)
@@ -270,22 +271,23 @@ local function _log_event(self, request_client, request_uri, rule, match)
 		uri = request_uri,
 		match = match,
 		rule = { id = rule.id }
-	}
+    }
+    local options = self.options
 
-	if (self._event_log_verbosity > 1) then
+	if (options._event_log_verbosity > 1) then
 		t.rule.description = rule.description
 	end
 
-	if (self._event_log_verbosity > 2) then
+	if (options._event_log_verbosity > 2) then
 		t.rule.opts = rule.opts
 		t.rule.action = rule.action
 	end
 
-	if (self._event_log_verbosity > 3) then
+	if (options._event_log_verbosity > 3) then
 		t.rule.var = rule.var
 	end
 
-    self._event_log_target(t)
+    options._event_log_target(t)
 end
 
 -- module-level table to define rule operators
@@ -326,7 +328,7 @@ local function _parse_dynamic_value(self, key, collections)
 	-- and find it in the lookup table
 	local str = ngx.re.gsub(key, [=[%{([^{]*)}]=], lookup, 'oij')
 	_log(self, "parsed dynamic value is " .. str)
-	if (ngx.re.find(str, [=[^\d+$]=], self._pcre_flags)) then
+	if (ngx.re.find(str, [=[^\d+$]=], self.options._pcre_flags)) then
 		return tonumber(str)
 	else
 		return str
@@ -335,7 +337,7 @@ end
 
 -- retrieve a given key from persistent storage
 local function _retrieve_persistent_var(self, key)
-	local shm = ngx.shared[self._storage_zone]
+	local shm = ngx.shared[self.options._storage_zone]
 	local var = shm:get(key)
 	return var
 end
@@ -343,7 +345,7 @@ end
 -- wrapper to get persistent storage data
 local function _get_var(self, key, collections)
 	-- silently bail from rules that require persistent storage if no shm was configured
-	if (not self._storage_zone) then
+	if (not self.options._storage_zone) then
 		return
 	end
 
@@ -352,8 +354,10 @@ end
 
 -- add/update data to persistent storaage
 local function _set_var(self, ctx, collections)
+    local options = self.options
+
 	-- silently bail from rules that require persistent storage if no shm was configured
-	if (not self._storage_zone) then
+	if (not options._storage_zone) then
 		return
 	end
 
@@ -361,10 +365,10 @@ local function _set_var(self, ctx, collections)
 	local value = _parse_dynamic_value(self, ctx.rule_setvar_value, collections)
 	local expire = ctx.rule_setvar_expire or 0
 	_log(self, "initially setting " .. ctx.rule_setvar_key .. " to " .. ctx.rule_setvar_value)
-	local shm = ngx.shared[self._storage_zone]
+	local shm = ngx.shared[options._storage_zone]
 
 	-- values can have arithmetic operations performed on them
-	local incr = ngx.re.match(value, [=[^([\+\-\*\/])(\d+)]=], self._pcre_flags)
+	local incr = ngx.re.match(value, [=[^([\+\-\*\/])(\d+)]=], options._pcre_flags)
 	if (incr) then
 		local operator = incr[1]
 		local newval = incr[2]
@@ -388,7 +392,7 @@ local function _set_var(self, ctx, collections)
 
 	local ok = shm:safe_set(key, value, expire)
 	if (not ok) then
-		ngx.log(ngx.WARN, "Could not add key to persistent storage, increase the size of the lua_shared_dict " .. self._storage_zone)
+		ngx.log(ngx.WARN, "Could not add key to persistent storage, increase the size of the lua_shared_dict " .. options._storage_zone)
 	end
 end
 
@@ -398,7 +402,7 @@ local actions = {
     end,
     ACCEPT = function(self, ctx)
         _log(self, "An explicit ACCEPT was sent, so ending this phase with ngx.OK")
-        if (self._mode == "ACTIVE") then
+        if (self.options._mode == "ACTIVE") then
             ngx.exit(ngx.OK)
         end
     end,
@@ -417,7 +421,7 @@ local actions = {
     end,
     DENY = function(self, ctx)
         _log(self, "rule.action was DENY, so telling nginx to quit!")
-        if (self._mode == "ACTIVE") then
+        if (self.options._mode == "ACTIVE") then
             ngx.exit(ngx.HTTP_FORBIDDEN)
         end
     end,
@@ -439,6 +443,7 @@ end
 -- handle request bodies
 local function _parse_request_body(self, request_headers)
 	local content_type_header = request_headers["content-type"]
+    local options = self.options;
 
 	-- multiple content-type headers are likely an evasion tactic
 	-- or result from misconfigured proxies. may consider relaxing
@@ -461,7 +466,7 @@ local function _parse_request_body(self, request_headers)
 	-- multipart/form-data requests will be streamed in via lua-resty-upload,
 	-- which provides some basic sanity checking as far as form and protocol goes
 	-- (but its much less strict that ModSecurity's strict checking)
-	if (ngx.re.find(content_type_header, [=[^multipart/form-data; boundary=]=], self._pcre_flags)) then
+	if (ngx.re.find(content_type_header, [=[^multipart/form-data; boundary=]=], options._pcre_flags)) then
 		local form, err = upload:new()
 		if not form then
             -- may move this into a ruleset along with other strict checking
@@ -518,7 +523,7 @@ local function _parse_request_body(self, request_headers)
 			_log(self, "very large form upload, not parsing")
 			_rule_action(self, "DENY")
 		end
-	elseif (self._allowed_content_types[content_type_header] ~= nil) then
+	elseif (options._allowed_content_types[content_type_header] ~= nil) then
 		-- users can whitelist specific content types that will be passed in but not parsed
 		-- read the request in, but don't set collections[REQUEST_BODY]
 		-- as we have no way to know what kind of data we're getting (i.e xml/json/octet stream)
@@ -560,7 +565,7 @@ local transforms = {
         _log(self, "encoded value is " .. t_val)
     end,
     compress_whitespace = function(self, value)
-        return ngx.re.gsub(value, [=[\s+]=], ' ', self._pcre_flags)
+        return ngx.re.gsub(value, [=[\s+]=], ' ', self.options._pcre_flags)
     end,
     html_decode = function(self, value)
         local str = string.gsub(value, '&lt;', '<')
@@ -577,13 +582,13 @@ local transforms = {
         return string.lower(tostring(value))
     end,
     remove_comments = function(self, value)
-        return ngx.re.gsub(value, [=[\/\*(\*(?!\/)|[^\*])*\*\/]=], '', self._pcre_flags)
+        return ngx.re.gsub(value, [=[\/\*(\*(?!\/)|[^\*])*\*\/]=], '', self.options._pcre_flags)
     end,
     remove_whitespace = function(self, value)
-        return ngx.re.gsub(value, [=[\s+]=], '', self._pcre_flags)
+        return ngx.re.gsub(value, [=[\s+]=], '', self.options._pcre_flags)
     end,
     replace_comments = function(self, value)
-        return ngx.re.gsub(value, [=[\/\*(\*(?!\/)|[^\*])*\*\/]=], ' ', self._pcre_flags)
+        return ngx.re.gsub(value, [=[\/\*(\*(?!\/)|[^\*])*\*\/]=], ' ', self.options._pcre_flags)
     end,
     uri_decode = function(self, value)
         return ngx.unescape_uri(value)
@@ -735,9 +740,9 @@ function _M.preload(sets)
     _M._sets = load_sets(sets)
 end
 
-local function rules(self)
+local function rules(options)
     if _M._sets == nil then
-       return load_sets(self._active_rulesets)
+       return load_sets(options._active_rulesets)
     end
 
     return _M._sets
@@ -748,7 +753,9 @@ end
 -- because the lua api only loads this module once, so module-level variables
 -- can be cross-polluted
 function _M.exec(self)
-	if (self._mode == "INACTIVE") then
+    local options = self.options
+
+	if (options._mode == "INACTIVE") then
 		_log(self, "Operational mode is INACTIVE, not running")
 		return
 	end
@@ -791,19 +798,19 @@ function _M.exec(self)
 		REQUEST_ARGS = request_common_args,
 		VAR = function(self, opts, collections) return _get_var(self, opts.value, collections) end,
 		SCORE = function() return ctx.score end,
-		SCORE_THRESHOLD = function(self) return self._score_threshold end,
-		WHITELIST = function(self) return self._whitelist end,
-		BLACKLIST = function(self) return self._blacklist end,
+		SCORE_THRESHOLD = function(self) return options._score_threshold end,
+		WHITELIST = function(self) return options._whitelist end,
+		BLACKLIST = function(self) return options._blacklist end,
     }
 
-    local rulesets = rules(self)
+    local rulesets = rules(options)
 
 	for _, ruleset in ipairs(rulesets) do
 		_log(self, "Beginning ruleset " .. ruleset.id)
 
-        if self._active_rulesets_inv[ruleset.id] ~= nil then
+        if options._active_rulesets_inv[ruleset.id] ~= nil then
             for __, rule in ipairs(ruleset.rules) do
-                if (self._ignored_rules[rule.id] == nil) then
+                if (options._ignored_rules[rule.id] == nil) then
                     _log(self, "Beginning run of rule " .. rule.id)
                     _process_rule(self, rule, collections, ctx)
                 else
@@ -861,7 +868,7 @@ _M.loggers = {
 _M._sets = nil
 
 -- default options
-_M.defaults = {
+_M.default = {
     _mode = "SIMULATE",
     _whitelist = {},
     _blacklist = {},
@@ -877,58 +884,63 @@ _M.defaults = {
     _storage_zone = nil
 }
 
-_M.defaults._active_rulesets_inv = _table_flip(_M.defaults._active_rulesets)
+_M.default._active_rulesets_inv = _table_flip(_M.default._active_rulesets)
 
 -- instantiate a new instance of the module
 function _M.new(self)
-	return setmetatable(_table_copy(_M.defaults), mt)
+	return setmetatable({options = _table_copy(_M.default)}, mt)
 end
 
 -- configuraton wrapper
 function _M.set_option(self, option, value)
+    local options = self.options
+    if options == nil then
+        options = self.default
+    end
+
 	local lookup = {
 		whitelist = function(value)
-			local t = self._whitelist
-			self._whitelist[#t + 1] = value
+			local t = options._whitelist
+            options._whitelist[#t + 1] = value
 		end,
 		blacklist = function(value)
-			local t = self._blacklist
-			self._blacklist[#t + 1] = value
+			local t = options._blacklist
+            options._blacklist[#t + 1] = value
 		end,
 		ignore_ruleset = function(value)
 			local t = {}
 			local n = 1
-			for _, v in ipairs(self._active_rulesets) do
+			for _, v in ipairs(options._active_rulesets) do
 				if (v ~= value) then
 					t[n] = v
 					n = n + 1
 				end
 			end
-			self._active_rulesets = t
+            options._active_rulesets = t
 		end,
 		ignore_rule = function(value)
-			self._ignored_rules[value] = true
+            options._ignored_rules[value] = true
 		end,
 		disable_pcre_optimization = function(value)
 			if (value == true) then
-				self._pcre_flags = 'i'
+                options._pcre_flags = 'i'
 			end
 		end,
 		storage_zone = function(value)
 			if (not ngx.shared[value]) then
 				_fatal_fail("Attempted to set FreeWAF storage zone as " .. tostring(value) .. ", but that lua_shared_dict does not exist")
 			end
-			self._storage_zone = value
+            options._storage_zone = value
 		end,
         event_log_target = function(value)
-            self._event_log_target = value
+            options._event_log_target = value
         end,
         allowed_content_types = function(value)
-            self._allowed_content_types = _table_flip(value)
+            options._allowed_content_types = _table_flip(value)
         end,
         active_rulesets = function(value)
-            self._active_rulesets_inv = _table_flip(value)
-            self._active_rulesets = value
+            options._active_rulesets_inv = _table_flip(value)
+            options._active_rulesets = value
         end
 	}
 
@@ -942,7 +954,7 @@ function _M.set_option(self, option, value)
 			lookup[option](value)
 		else
 			local _option = "_" .. option
-			self[_option] = value
+			options[_option] = value
 		end
 	end
 
