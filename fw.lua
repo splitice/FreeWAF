@@ -32,6 +32,12 @@ local function _fatal_fail(msg)
 	ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
 end
 
+-- bail with http error
+local function _bail_log(self, msg, code)
+    _log(self, msg)
+    ngx.exit(code)
+end
+
 -- used for operators.EQUALS
 local function _equals(self, a, b)
 	local equals
@@ -448,8 +454,7 @@ local function _parse_request_body(self, request_headers)
 	-- or result from misconfigured proxies. may consider relaxing
 	-- this or adding an option to disable this checking in the future
 	if (type(content_type_header) == "table") then
-		_log(self, "request contained multiple content-type headers, bailing!")
-		ngx.exit(400)
+        _bail_log(self, "request contained multiple content-type headers, bailing!", 400)
 	end
 
 	-- ignore the request body if no Content-Type header is sent
@@ -469,8 +474,8 @@ local function _parse_request_body(self, request_headers)
 	if (ngx.re.find(content_type_header, [=[^multipart/form-data; boundary=]=], self._pcre_flags)) then
 		local form, err = upload:new()
 		if not form then
-			ngx.log(ngx.ERR, "failed to parse multipart request: ", err)
-			ngx.exit(400) -- may move this into a ruleset along with other strict checking
+            -- may move this into a ruleset along with other strict checking
+            _bail_log(self, "failed to parse multipart request: ".. err, 400)
 		end
 
 		ngx.req.init_body()
