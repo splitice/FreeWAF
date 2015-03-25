@@ -353,7 +353,7 @@ local function _get_var(self, key, collections)
 end
 
 -- add/update data to persistent storaage
-local function _set_var(self, ctx, collections)
+local function _set_var(self, collections, key, value, expire)
     local options = self.options
 
 	-- silently bail from rules that require persistent storage if no shm was configured
@@ -361,10 +361,10 @@ local function _set_var(self, ctx, collections)
 		return
 	end
 
-	local key = _parse_dynamic_value(self, ctx.rule_setvar_key, collections)
-	local value = _parse_dynamic_value(self, ctx.rule_setvar_value, collections)
-	local expire = ctx.rule_setvar_expire or 0
+	key = _parse_dynamic_value(self, key, collections)
+	value = _parse_dynamic_value(self, value, collections)
 	_log(self, "initially setting " .. ctx.rule_setvar_key .. " to " .. ctx.rule_setvar_value)
+
 	local shm = ngx.shared[options._storage_zone]
 
 	-- values can have arithmetic operations performed on them
@@ -445,9 +445,12 @@ local actions = {
             _log(self, "Ingoring rule for now")
         end
     end,
-    SETVAR = function()
+    SETVAR = function(rule)
+        local setvar_key = rule.opts.setvar.key
+        local setvar_value = rule.opts.setvar.value
+        local setvar_expire = rule.opts.setvar.expire or 0
         return function(self, ctx, collections)
-            _set_var(self, ctx, collections)
+            _set_var(self, ctx, collections, setvar_key, setvar_value, setvar_expire)
         end
     end
 }
@@ -653,12 +656,6 @@ local function _process_rule(self, rule, collections, ctx)
 	local pattern = var.pattern
 
 	ctx.id = id
-
-	if (opts.setvar) then
-		ctx.rule_setvar_key = opts.setvar.key
-		ctx.rule_setvar_value = opts.setvar.value
-		ctx.rule_setvar_expire = opts.setvar.expire
-	end
 
 	if (opts.chainchild == true and ctx.chained == false) then
 		_log(self, "This is a chained rule, but we don't have a previous match, so not processing")
@@ -967,7 +964,7 @@ function _M.set_option(self, option, value)
 	}
 
     -- I dont like this table logic!
-	if type(value) == "table" and option ~= "allowed_content_types" and option ~= "active_rulesets" then 
+	if type(value) == "table" and option ~= "allowed_content_types" and option ~= "active_rulesets" then
 		for _, v in ipairs(value) do
 			self:set_option(option, v)
 		end
