@@ -947,7 +947,7 @@ function _M.set_option(self, option, value)
     -- I dont like this table logic!
 	if type(value) == "table" and option ~= "allowed_content_types" and option ~= "active_rulesets" then
 		for _, v in ipairs(value) do
-			_M.set_option(self, option, v)
+			self:set_option(option, v)
 		end
 	else
 		if (lookup[option]) then
