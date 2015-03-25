@@ -70,18 +70,16 @@ end
 -- duplicate a table using recursion if necessary for multi-dimensional tables
 -- useful for getting a local copy of a table
 local function _table_copy(self, orig)
-    local orig_type = type(orig)
-    local copy
-    if orig_type == 'table' then
-        copy = {}
-        for orig_key, orig_value in next, orig, nil do
-            copy[_table_copy(orig_key)] = _table_copy(self, orig_value)
+    if type(orig) == 'table' then
+        local copy = {}
+        for k, v in next, orig, nil do
+            copy[_table_copy(k)] = _table_copy(self, v)
         end
         setmetatable(copy, _table_copy(getmetatable(orig)))
-    else -- number, string, boolean, etc
-        copy = orig
     end
-    return copy
+
+    -- number, string, boolean, etc
+    return orig
 end
 
 -- return a table containing the keys of the provided table
