@@ -523,7 +523,7 @@ local function _parse_request_body(self, request_headers)
 			_log(self, "very large form upload, not parsing")
 			_rule_action(self, "DENY")
 		end
-	elseif (_table_has_value(self, content_type_header, self._allowed_content_types)) then
+	elseif (self._allowed_content_types[content_type_header] ~= nil) then
 		-- users can whitelist specific content types that will be passed in but not parsed
 		-- read the request in, but don't set collections[REQUEST_BODY]
 		-- as we have no way to know what kind of data we're getting (i.e xml/json/octet stream)
@@ -887,9 +887,16 @@ function _M.set_option(self, option, value)
 			end
 			self._storage_zone = value
 		end,
-	        event_log_target = function(value)
-	            self._event_log_target = value
-	        end
+        event_log_target = function(value)
+            self._event_log_target = value
+        end,
+        allowed_content_types = function(value)
+            local t = {}
+            for _,v in ipairs(value) do
+                t[v] = true
+            end
+            self._allowed_content_types = t
+        end
 	}
 
 	if (type(value) == "table") then
