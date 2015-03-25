@@ -584,13 +584,13 @@ local transforms = {
         return ngx.re.gsub(value, [=[\s+]=], ' ', self.options._pcre_flags)
     end,
     html_decode = function(self, value)
-        local str = string.gsub(value, '&lt;', '<')
-        str = string.gsub(str, '&gt;', '>')
-        str = string.gsub(str, '&quot;', '"')
-        str = string.gsub(str, '&apos;', "'")
-        str = string.gsub(str, '&#(%d+);', function(n) return string.char(n) end)
-        str = string.gsub(str, '&#x(%d+);', function(n) return string.char(tonumber(n,16)) end)
-        str = string.gsub(str, '&amp;', '&')
+        local str = ngx.re.gsub(value, '&lt;', '<', self.options._pcre_flags)
+        str = ngx.re.gsub(str, '&gt;', '>', self.options._pcre_flags)
+        str = ngx.re.gsub(str, '&quot;', '"', self.options._pcre_flags)
+        str = ngx.re.gsub(str, '&apos;', "'", self.options._pcre_flags)
+        str = ngx.re.gsub(str, '&#(%d+);', function(n) return string.char(n) end, self.options._pcre_flags)
+        str = ngx.re.gsub(str, '&#x(%d+);', function(n) return string.char(tonumber(n,16)) end, self.options._pcre_flags)
+        str = ngx.re.gsub(str, '&amp;', '&', self.options._pcre_flags)
         _log(self, "html decoded value is " .. str)
         return str
     end,
