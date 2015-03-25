@@ -653,7 +653,6 @@ local function _process_rule(self, rule, collections, ctx)
 	local id = rule.id
 	local var = rule.var
 	local opts = rule.opts
-	local description = rule.description
 	local pattern = var.pattern
 
 	ctx.id = id
