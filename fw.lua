@@ -250,7 +250,7 @@ end
 local function _build_common_args(self, ...)
 	local t = {}
 
-	for _, collection in ipairs(...) do
+	for _, collection in ipairs({...}) do -- most optimal?
 		if (collection ~= nil) then
 			for k, v in pairs(collection) do
 				if (t[k] == nil) then
