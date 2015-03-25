@@ -540,12 +540,11 @@ local function _transform_memokey(transform)
 	if (not transform) then
 		return 'nil'
 	end
-
 	if (type(transform) ~= 'table') then
 		return tostring(transform)
-	else
-		return table.concat(transform, ',')
-	end
+    end
+
+    return table.concat(transform, ',')
 end
 
 _M.transforms = {
