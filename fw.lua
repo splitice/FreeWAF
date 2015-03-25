@@ -42,7 +42,6 @@ end
 local function _equals(self, a, b)
 	local equals
 	if (type(a) == "table") then
-		_log(self, "Needle is a table, so recursing!")
 		for _, v in ipairs(a) do
 			equals = _equals(self, v, b)
 			if (equals) then
@@ -50,7 +49,6 @@ local function _equals(self, a, b)
 			end
 		end
 	else
-		_log(self, "Comparing " .. tostring(a) .. " and " .. tostring(b))
 		equals = a == b
 	end
 
@@ -61,7 +59,6 @@ end
 local function _greater(self, a, b)
 	local greater
 	if (type(a) == "table") then
-		_log(self, "Needle is a table, so recursing!")
 		for _, v in ipairs(a) do
 			greater = _greater(self, v, b)
 			if (greater) then
@@ -69,7 +66,6 @@ local function _greater(self, a, b)
 			end
 		end
 	else
-		_log(self, "Comparing (greater) " .. tostring(a) .. " and " .. tostring(b))
 		greater = a > b
 	end
 
@@ -130,41 +126,38 @@ end
 
 -- determine if the haystack table has a needle for a key
 local function _table_has_value(self, needle, haystack)
-	_log(self, "Searching for " .. needle)
-
 	if (type(haystack) ~= "table") then
 		_fatal_fail("Cannot search for a needle when haystack is type " .. type(haystack))
 	end
 
 	for _, value in pairs(haystack) do
-		_log(self, "Checking " .. value)
 		if (value == needle) then return true end
-	end
+    end
+    return false
 end
 
 -- regex matcher (uses POSIX patterns via ngx.re.match)
 local function _regex_match(self, subject, pattern, opts)
-	local opts = self._pcre_flags
-	local from, to, err
 	local match
 
 	if (type(subject) == "table") then
-		_log(self, "subject is a table, so recursing!")
 		for _, v in ipairs(subject) do
 			match = _regex_match(self, v, pattern, opts)
 			if (match) then
-				break
+				return match
 			end
-		end
-	else
-		_log(self, "matching " .. subject .. " against " .. pattern)
-		from, to, err = ngx.re.find(subject, pattern, opts)
-		if err then ngx.log(ngx.WARN, "error in waf.regexmatch: " .. err) end
-		if from then
-			_log(self, "regex match! " .. string.sub(subject, from, to))
-			match = string.sub(subject, from, to)
-		end
-	end
+        end
+        return match
+    end
+
+    local from, to, err = ngx.re.find(subject, pattern, self._pcre_flags)
+    if err then ngx.log(ngx.WARN, "error in waf.regexmatch: " .. err) end
+    if from then
+        match = string.sub(subject, from, to)
+        _log(self,  subject .. " against " .. pattern .. " MATCH: " .. match)
+    else
+        _log(self,  subject .. " against " .. pattern .. ": NOT MATCH")
+    end
 
 	return match
 end
@@ -707,10 +700,11 @@ local function _process_rule(self, rule, collections, ctx)
 		if (opts.parsepattern) then
 			_log(self, "parsing dynamic pattern: " .. pattern)
 			pattern = _parse_dynamic_value(self, pattern, collections)
-		end
+        end
+
 		local match = operators[var.operator](self, t, pattern, ctx)
 		if (match) then
-			_log(self, "Match of rule " .. id .. "!")
+			_log(self, "Match of rule " .. id .. " using " .. var.operator .. "!")
 
 			if (not opts.nolog) then
 				_log_event(self, collections["IP"], collections["URI"], rule, match)
@@ -719,6 +713,8 @@ local function _process_rule(self, rule, collections, ctx)
 			end
 
 			_rule_action(self, action, ctx, collections)
+        else
+            _log(self, "Failed to match rule " .. id .. " using " .. var.operator .. "!")
 		end
 	end
 
