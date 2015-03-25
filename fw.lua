@@ -69,13 +69,13 @@ end
 
 -- duplicate a table using recursion if necessary for multi-dimensional tables
 -- useful for getting a local copy of a table
-local function _table_copy(self, orig)
+local function _table_copy(orig)
     if type(orig) == 'table' then
         local copy = {}
         for k, v in next, orig, nil do
-            copy[_table_copy(k)] = _table_copy(self, v)
+            copy[_table_copy(k)] = _table_copy(v)
         end
-        setmetatable(copy, _table_copy(getmetatable(orig)))
+        --setmetatable(copy, _table_copy(getmetatable(orig)))
     end
 
     -- number, string, boolean, etc
@@ -127,6 +127,15 @@ local function _table_has_value(self, needle, haystack)
 		if (value == needle) then return true end
     end
     return false
+end
+
+-- make the values into keys, set value to true
+local function _table_flip(value)
+    local t = {}
+    for _,v in ipairs(value) do
+        t[v] = true
+    end
+    return t
 end
 
 -- regex matcher (uses POSIX patterns via ngx.re.match)
@@ -193,7 +202,7 @@ local function _parse_collection(self, collection, opts)
 		end,
 		ignore = function(self, collection, value)
 			local _collection = {}
-			_collection = _table_copy(self, collection)
+			_collection = _table_copy(collection)
 			_collection[value] = nil
 			return _collection
 		end,
@@ -851,28 +860,28 @@ _M.loggers = {
 -- sets can be pre-loaded into the module
 _M._sets = nil
 
+-- default options
+_M.defaults = {
+    _mode = "SIMULATE",
+    _whitelist = {},
+    _blacklist = {},
+    _active_rulesets = { 10000, 11000, 20000, 21000, 35000, 40000, 41000, 42000, 90000, 99000 },
+    _ignored_rules = {},
+    _allowed_content_types = {},
+    _debug = false,
+    _debug_log_level = ngx.INFO,
+    _event_log_verbosity = 1,
+    _event_log_target = _M.loggers["error"](),
+    _pcre_flags = 'oij',
+    _score_threshold = 5,
+    _storage_zone = nil
+}
+
+_M.defaults._active_rulesets_inv = _table_flip(_M.defaults._active_rulesets)
+
 -- instantiate a new instance of the module
 function _M.new(self)
-	self = setmetatable({
-		_mode = "SIMULATE",
-		_whitelist = {},
-		_blacklist = {},
-		_active_rulesets = {},
-		_ignored_rules = {},
-		_allowed_content_types = {},
-		_debug = false,
-		_debug_log_level = ngx.INFO,
-		_event_log_verbosity = 1,
-		_event_log_target = _M.loggers["error"](),
-		_pcre_flags = 'oij',
-		_score_threshold = 5,
-		_storage_zone = nil,
-        _active_rulesets_inv = {}
-	}, mt)
-
-    self:set_option("active_rulesets", { 10000, 11000, 20000, 21000, 35000, 40000, 41000, 42000, 90000, 99000 })
-
-    return self
+	return setmetatable(_table_copy(_M.defaults), mt)
 end
 
 -- configuraton wrapper
@@ -915,18 +924,10 @@ function _M.set_option(self, option, value)
             self._event_log_target = value
         end,
         allowed_content_types = function(value)
-            local t = {}
-            for _,v in ipairs(value) do
-                t[v] = true
-            end
-            self._allowed_content_types = t
+            self._allowed_content_types = _table_flip(value)
         end,
         active_rulesets = function(value)
-            local t = {}
-            for _,v in ipairs(value) do
-                t[v] = true
-            end
-            self._active_rulesets_inv = t
+            self._active_rulesets_inv = _table_flip(value)
             self._active_rulesets = value
         end
 	}
