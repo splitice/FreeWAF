@@ -434,12 +434,6 @@ local actions = {
 }
 _M.actions = actions
 
--- use the lookup table to figure out what to do
-local function _rule_action(self, action, ctx, collections)
-	_log(self, "Taking the following action: " .. action)
-	actions[action](self, ctx, collections)
-end
-
 -- handle request bodies
 local function _parse_request_body(self, request_headers)
 	local content_type_header = request_headers["content-type"]
@@ -521,7 +515,7 @@ local function _parse_request_body(self, request_headers)
 			return ngx.req.get_post_args()
 		else
 			_log(self, "very large form upload, not parsing")
-			_rule_action(self, "DENY")
+			actions.DENY(self)
 		end
 	elseif (options._allowed_content_types[content_type_header] ~= nil) then
 		-- users can whitelist specific content types that will be passed in but not parsed
@@ -531,7 +525,7 @@ local function _parse_request_body(self, request_headers)
 		return nil
 	else
 		_log(self, tostring(content_type_header) .. " not a valid content type!")
-		_rule_action(self, "DENY")
+        actions.DENY(self)
 	end
 end
 
@@ -636,7 +630,6 @@ local function _process_rule(self, rule, collections, ctx)
 	local id = rule.id
 	local var = rule.var
 	local opts = rule.opts
-	local action = rule.action
 	local description = rule.description
 	local pattern = var.pattern
 
@@ -704,7 +697,7 @@ local function _process_rule(self, rule, collections, ctx)
 
 		local match = operators[var.operator](self, t, pattern, ctx)
 		if (match) then
-			_log(self, "Match of rule " .. id .. " using " .. var.operator .. "!")
+			_log(self, "Match of rule " .. id .. " using " .. var.operator .. " resulting in " .. rule.action .. "!")
 
 			if (not opts.nolog) then
 				_log_event(self, collections["IP"], collections["URI"], rule, match)
@@ -712,7 +705,7 @@ local function _process_rule(self, rule, collections, ctx)
 				_log(self, "We had a match, but not logging because opts.nolog is set")
 			end
 
-			_rule_action(self, action, ctx, collections)
+            rule.action_ptr(self, ctx, collections)
         else
             _log(self, "Failed to match rule " .. id .. " using " .. var.operator .. "!")
 		end
@@ -723,13 +716,26 @@ local function _process_rule(self, rule, collections, ctx)
 	end
 end
 
+local function _preprocess_rule(rule)
+    if actions[rule.action] == nil then
+       _fatal_fail("Action ".. rule.id .." does not exist for rule "..rule.id)
+    end
+    rule.action_ptr = actions[rule.action]
+
+
+end
+
 local function load_sets(available)
     local sets = new_tab(#available,0)
     local n = 1
 
     for _, id in ipairs(available) do
         local rs = require("FreeWAF.rules." .. id)
-        sets[n] = { id = id, rules = rs.rules() }
+        local rules = rs.rules()
+        for __,r in ipairs(rules) do
+            _preprocess_rule(r)
+        end
+        sets[n] = { id = id, rules = rules}
         n = n + 1
     end
 
@@ -946,10 +952,6 @@ function _M.set_option(self, option, value)
 
     -- I dont like this table logic!
 	if type(value) == "table" and option ~= "allowed_content_types" and option ~= "active_rulesets" then
-		for _, v in ipairs(value) do
-			_M.set_option(self, option, v)
-		end
-	else
 		if (lookup[option]) then
 			lookup[option](value)
 		else
