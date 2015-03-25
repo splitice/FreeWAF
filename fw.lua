@@ -712,9 +712,10 @@ end
 local function load_sets(available)
     local sets = {}
 
-    for _, v in ipairs(available) do
-        local rs = require("FreeWAF.rules." .. v)
-        sets[v] = rs.rules()
+    for i=1, #available do
+        local id = available[i]
+        local rs = require("FreeWAF.rules." .. id)
+        sets[id] = rs.rules()
     end
 
     return sets
@@ -783,12 +784,15 @@ function _M.exec(self)
 		SCORE_THRESHOLD = function(self) return self._score_threshold end,
 		WHITELIST = function(self) return self._whitelist end,
 		BLACKLIST = function(self) return self._blacklist end,
-	}
+    }
 
-	for id, ruleset in pairs(rules(self)) do
+    local rulesets = rules(self)
+
+	for id, ruleset in pairs(rulesets) do
 		_log(self, "Beginning ruleset " .. id)
 
-		for __, rule in ipairs(ruleset) do
+		for f=1, #ruleset do
+            local rule = ruleset[f]
 			if (self._ignored_rules[rule.id] == nil) then
 				_log(self, "Beginning run of rule " .. rule.id)
 				_process_rule(self, rule, collections, ctx)
