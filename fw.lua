@@ -849,7 +849,7 @@ function _M.new(self)
 		_debug = false,
 		_debug_log_level = ngx.INFO,
 		_event_log_verbosity = 1,
-		_event_log_target = _M.loggers["error"],
+		_event_log_target = _M.loggers["error"](),
 		_pcre_flags = 'oij',
 		_score_threshold = 5,
 		_storage_zone = nil
