@@ -711,10 +711,12 @@ end
 
 local function load_sets(available)
     local sets = new_tab(#available,0)
+    local n = 1
 
     for _, id in ipairs(available) do
         local rs = require("FreeWAF.rules." .. id)
-        sets[id] = rs.rules()
+        sets[n] = { id = id, rules = rs.rules() }
+        n = n + 1
     end
 
     return sets
@@ -787,17 +789,19 @@ function _M.exec(self)
 
     local rulesets = rules(self)
 
-	for id, ruleset in pairs(rulesets) do
-		_log(self, "Beginning ruleset " .. id)
+	for _, ruleset in ipairs(rulesets) do
+		_log(self, "Beginning ruleset " .. ruleset.id)
 
-		for _, rule in ipairs(ruleset) do
-			if (self._ignored_rules[rule.id] == nil) then
-				_log(self, "Beginning run of rule " .. rule.id)
-				_process_rule(self, rule, collections, ctx)
-			else
-				_log(self, "Ignoring rule " .. rule.id)
-			end
-		end
+        if self._active_rulesets_inv[ruleset.id] ~= nil then
+            for __, rule in ipairs(ruleset.rules) do
+                if (self._ignored_rules[rule.id] == nil) then
+                    _log(self, "Beginning run of rule " .. rule.id)
+                    _process_rule(self, rule, collections, ctx)
+                else
+                    _log(self, "Ignoring rule " .. rule.id)
+                end
+            end
+        end
 	end
 end -- fw.exec()
 
@@ -849,11 +853,11 @@ _M._sets = nil
 
 -- instantiate a new instance of the module
 function _M.new(self)
-	return setmetatable({
+	self = setmetatable({
 		_mode = "SIMULATE",
 		_whitelist = {},
 		_blacklist = {},
-		_active_rulesets = { 10000, 11000, 20000, 21000, 35000, 40000, 41000, 42000, 90000, 99000 },
+		_active_rulesets = {},
 		_ignored_rules = {},
 		_allowed_content_types = {},
 		_debug = false,
@@ -863,7 +867,12 @@ function _M.new(self)
 		_pcre_flags = 'oij',
 		_score_threshold = 5,
 		_storage_zone = nil,
+        _active_rulesets_inv = {}
 	}, mt)
+
+    self:set_option("active_rulesets", { 10000, 11000, 20000, 21000, 35000, 40000, 41000, 42000, 90000, 99000 })
+
+    return self
 end
 
 -- configuraton wrapper
@@ -911,10 +920,19 @@ function _M.set_option(self, option, value)
                 t[v] = true
             end
             self._allowed_content_types = t
+        end,
+        active_rulesets = function(value)
+            local t = {}
+            for _,v in ipairs(value) do
+                t[v] = true
+            end
+            self._active_rulesets_inv = t
+            self._active_rulesets = value
         end
 	}
 
-	if (type(value) == "table") then
+    -- I dont like this table logic!
+	if type(value) == "table" and option ~= "allowed_content_types" and option ~= "active_rulesets" then
 		for _, v in ipairs(value) do
 			_M.set_option(self, option, v)
 		end
