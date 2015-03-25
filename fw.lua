@@ -604,20 +604,20 @@ _M.transforms = {
 -- this returns directly to _process_rule or a recursed call from multiple transforms
 local function _do_transform(self, collection, transform)
 	-- create a new tmp table to hold the transformed values
-	local t = {}
+	local t
 
-    local __do_transform = function(self, collection, transform)
+    local _transform_value = function(self, collection, transform)
+        _log(self, "doing transform of type " .. transform .. " on collection value " .. tostring(collection))
+        return self.transforms[transform](self, collection)
+    end
+
+    local _transform_collection = function(self, collection, transform)
         -- if collection is a table, do multiple times, else do single
         if (type(collection) == "table") then
             _log(self, "collection is a table, recursing its transform for each element")
             for k, v in pairs(collection) do
-                t[k] = _M.transforms[transform](self, v) -- a very small code duplication, refactor?
+                t[k] = _transform_value(self, v, transform)
             end
-        elseif (not collection) then
-            return collection -- dont transform if the collection was nil, i.e. a specific arg key dne
-        else
-            _log(self, "doing transform of type " .. transform .. " on collection value " .. tostring(collection))
-            return _M.transforms[transform](self, collection)
         end
     end
 
@@ -626,11 +626,12 @@ local function _do_transform(self, collection, transform)
 		_log(self, "multiple transforms are defined, iterating through each one")
 		t = collection
 		for k, v in ipairs(transform) do
-			t = __do_transform(self, t, transform[k])
+            _transform_collection(self, t, v)
 		end
     else
-        __do_transform(self, collection, transform)
-	end
+        t = {}
+        _transform_collection(self, collection, transform)
+    end
 
 	return t
 end
