@@ -195,36 +195,36 @@ local function _ac_lookup(self, needle, haystack, ctx)
 	return ac.match(_ac, needle)
 end
 
+local key_parse = {
+    specific = function(self, collection, value)
+        return collection[value]
+    end,
+    ignore = function(self, collection, value)
+        local _collection = {}
+        _collection = _table_copy(collection)
+        _collection[value] = nil
+        return _collection
+    end,
+    keys = function(self, collection)
+        return _table_keys(self, collection)
+    end,
+    values = function(self, collection)
+        return _table_values(self, collection)
+    end,
+    all = function(self, collection)
+        local n = 1
+        local _collection = new_tab(#collection*2,0)
+        for k, v in pairs(collection) do
+            _collection[n] = tostring(k)
+            _collection[n + 1] = tostring(v)
+            n = n + 2
+        end
+        return _collection
+    end
+}
+
 -- get a subset or superset of request data collection
 local function _parse_collection(self, collection, opts)
-	local lookup = {
-		specific = function(self, collection, value)
-			return collection[value]
-		end,
-		ignore = function(self, collection, value)
-			local _collection = {}
-			_collection = _table_copy(collection)
-			_collection[value] = nil
-			return _collection
-		end,
-		keys = function(self, collection)
-			return _table_keys(self, collection)
-		end,
-		values = function(self, collection)
-			return _table_values(self, collection)
-		end,
-		all = function(self, collection)
-			local n = 1
-			local _collection = new_tab(#collection*2,0)
-			for k, v in pairs(collection) do
-				_collection[n] = tostring(k)
-                _collection[n + 1] = tostring(v)
-                n = n + 2
-			end
-			return _collection
-		end
-	}
-
 	if (type(collection) ~= "table") then
 		return collection
 	end
@@ -234,7 +234,7 @@ local function _parse_collection(self, collection, opts)
 	end
 
     _log(self, "_parse_collection is using " .. opts.key .. "method") -- log the value?
-	return lookup[opts.key](self, collection, opts.value)
+	return opts.key_ptr(self, collection, opts.value)
 end
 
 -- return a single table from multiple tables containing request data
@@ -711,7 +711,7 @@ local function _process_rule(self, rule, collections, ctx)
 			pattern = _parse_dynamic_value(self, pattern, collections)
         end
 
-		local match = operators[var.operator](self, t, pattern, ctx)
+		local match = var.operator_ptr(self, t, pattern, ctx)
 		if (match) then
 			_log(self, "Match of rule " .. id .. " using " .. var.operator .. " resulting in " .. rule.action .. "!")
 
@@ -736,12 +736,30 @@ end
 -- TODO: cleanup this area!
 -- TODO: create a full executable pointer for the entire set
 local function _preprocess_rule(rule)
+    -- actions
     if actions[rule.action] == nil then
-       _fatal_fail("Action ".. rule.id .." does not exist for rule "..rule.id)
+       _fatal_fail("Action ".. rule.action .." does not exist for rule "..rule.id)
     end
     rule.action_ptr = actions[rule.action](rule)
 
+    -- operators
+    if operators[rule.var.operator] == nil then
+        _fatal_fail("Operator ".. rule.var.operator .." does not exist for rule "..rule.id)
+    end
+    rule.var.operator_ptr = operators[rule.var.operator]
+
+    if rule.var.opts ~= nil then
+        -- key
+        if rule.var.opts.key ~= nil then
+            if key_parse[rule.var.opts.key] == nil then
+                _fatal_fail("Collection parse key ".. rule.var.opts.key .." does not exist for rule "..rule.id)
+            end
+            rule.var.opts.key_ptr = key_parse[rule.var.opts.key]
+        end
+    end
+
     if rule.opts ~= nil then
+        -- transforms
         if rule.opts.transform ~= nil then
             if type(rule.opts.transform) == "table" then
                 rule.opts.transform_ptr = {}
