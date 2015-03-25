@@ -865,7 +865,7 @@ function _M.set_option(self, option, value)
 		ignore_ruleset = function(value)
 			local t = {}
 			local n = 1
-			for k, v in ipairs(self._active_rulesets) do
+			for _, v in ipairs(self._active_rulesets) do
 				if (v ~= value) then
 					t[n] = v
 					n = n + 1
