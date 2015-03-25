@@ -766,7 +766,6 @@ function _M.exec(self)
 	for _, ruleset in ipairs(self._active_rulesets) do
 		_log(self, "Beginning ruleset " .. ruleset)
 
-		_log(self, "Requiring " .. ruleset)
 		local rs = require("FreeWAF.rules." .. ruleset)
 
 		for __, rule in ipairs(rs.rules()) do
