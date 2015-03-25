@@ -624,8 +624,9 @@ local function _do_transform(self, collection, transform)
         if (type(collection) == "table") then
             _log(self, "collection is a table, recursing its transform for each element")
             for k, v in pairs(collection) do
-                _log(self, "doing transform of type " .. transform .. " on collection value " .. tostring(v))
-                t[k] = transforms[transform](self, v)
+                --information lost to pre-compiling
+                --_log(self, "doing transform of type " .. transform .. " on collection value " .. tostring(v))
+                t[k] = transform(self, v)
             end
         end
     end
@@ -692,7 +693,7 @@ local function _process_rule(self, rule, collections, ctx)
 			_log(self, "parsing collections for rule " .. id)
 			t = _parse_collection(self, collections[var.type], var.opts)
 			if (opts.transform) then
-				t = _do_transform(self, t, opts.transform)
+				t = _do_transform(self, t, opts.transform_ptr)
 			end
 			ctx.collections[memokey] = t
 			ctx.collections_key[memokey] = true
@@ -731,11 +732,27 @@ local function _process_rule(self, rule, collections, ctx)
 	end
 end
 
+-- pre-process rules to insert function pointers
+-- TODO: cleanup this area!
+-- TODO: create a full executable pointer for the entire set
 local function _preprocess_rule(rule)
     if actions[rule.action] == nil then
        _fatal_fail("Action ".. rule.id .." does not exist for rule "..rule.id)
     end
     rule.action_ptr = actions[rule.action](rule)
+
+    if rule.opts ~= nil then
+        if rule.opts.transform ~= nil then
+            if type(rule.opts.transform) == "table" then
+                rule.opts.transform_ptr = {}
+                for k,v in ipairs(rule.opts.transform) do
+                    rule.opts.transform_ptr[k] = transforms[v]
+                end
+            else
+                rule.opts.transform_ptr = transforms[rule.opts.transform]
+            end
+        end
+    end
 end
 
 local function load_sets(available)
