@@ -808,30 +808,32 @@ _M.loggers = {
     end,
     file = function(event_log_target_path, event_log_buffer_size, event_log_periodic_flush)
         event_log_buffer_size = event_log_buffer_size or 4096
-        return function(t)
-            if (not file_logger.initted()) then
-                file_logger.init{
-                    path = event_log_target_path,
-                    flush_limit = event_log_buffer_size,
-                    periodic_flush = event_log_periodic_flush
-                }
-            end
 
+        if (not file_logger.initted()) then
+            file_logger.init{
+                path = event_log_target_path,
+                flush_limit = event_log_buffer_size,
+                periodic_flush = event_log_periodic_flush
+            }
+        end
+
+        return function(t)
             file_logger.log(cjson.encode(t) .. "\n")
         end
     end,
     socket = function(event_log_target_host, event_log_target_path, event_log_buffer_size, event_log_periodic_flush)
         event_log_buffer_size = event_log_buffer_size or 4096
-        return function(t)
-            if (not socket_logger.initted()) then
-                socket_logger.init{
-                    host = event_log_target_host,
-                    port = event_log_target_path,
-                    flush_limit = event_log_buffer_size,
-                    period_flush = event_log_periodic_flush
-                }
-            end
 
+        if (not socket_logger.initted()) then
+            socket_logger.init{
+                host = event_log_target_host,
+                port = event_log_target_path,
+                flush_limit = event_log_buffer_size,
+                period_flush = event_log_periodic_flush
+            }
+        end
+
+        return function(t)
             socket_logger.log(cjson_encode(t) .. "\n")
         end
     end
