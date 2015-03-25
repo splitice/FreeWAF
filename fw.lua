@@ -147,9 +147,9 @@ local function _regex_match(self, subject, pattern, opts)
     if err then ngx.log(ngx.WARN, "error in waf.regexmatch: " .. err) end
     if from then
         match = string.sub(subject, from, to)
-        _log(self,  subject .. " against " .. pattern .. " MATCH: " .. match)
+        _log(self,  "Match " .. subject .. " against " .. pattern .. " HIT: " .. match)
     else
-        _log(self,  subject .. " against " .. pattern .. ": NOT MATCH")
+        _log(self,  "Match " .. subject .. " against " .. pattern .. ": MISS")
     end
 
 	return match
