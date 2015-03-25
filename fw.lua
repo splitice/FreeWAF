@@ -396,40 +396,59 @@ local function _set_var(self, ctx, collections)
 	end
 end
 
+local function action_deny(self)
+    _log(self, "rule.action was DENY, so telling nginx to quit!")
+    if (self.options._mode == "ACTIVE") then
+        ngx.exit(ngx.HTTP_FORBIDDEN)
+    end
+end
+
 local actions = {
-    LOG = function(self)
-        _log(self, "rule.action was LOG, since we already called log_event this is relatively meaningless")
-    end,
-    ACCEPT = function(self, ctx)
-        _log(self, "An explicit ACCEPT was sent, so ending this phase with ngx.OK")
-        if (self.options._mode == "ACTIVE") then
-            ngx.exit(ngx.OK)
+    LOG = function()
+        return function(self)
+            _log(self, "rule.action was LOG, since we already called log_event this is relatively meaningless")
         end
     end,
-    CHAIN = function(self, ctx)
-        _log(self, "Setting the context chained flag to true")
-        ctx.chained = true
-    end,
-    SKIP = function(self, ctx)
-        _log(self, "Setting the context skip flag to true")
-        ctx.skip = true
-    end,
-    SCORE = function(self, ctx)
-        local new_score = ctx.score + ctx.rule_score
-        _log(self, "New score is " .. new_score)
-        ctx.score = new_score
-    end,
-    DENY = function(self, ctx)
-        _log(self, "rule.action was DENY, so telling nginx to quit!")
-        if (self.options._mode == "ACTIVE") then
-            ngx.exit(ngx.HTTP_FORBIDDEN)
+    ACCEPT = function()
+        return function(self, ctx)
+            _log(self, "An explicit ACCEPT was sent, so ending this phase with ngx.OK")
+            if (self.options._mode == "ACTIVE") then
+                ngx.exit(ngx.OK)
+            end
         end
     end,
-    IGNORE = function(self)
-        _log(self, "Ingoring rule for now")
+    CHAIN = function()
+        return function(self, ctx)
+            _log(self, "Setting the context chained flag to true")
+            ctx.chained = true
+        end
     end,
-    SETVAR = function(self, ctx, collections)
-        _set_var(self, ctx, collections)
+    SKIP = function()
+        return function(self, ctx)
+            _log(self, "Setting the context skip flag to true")
+            ctx.skip = true
+        end
+    end,
+    SCORE = function(rule)
+        local score_add = rule.opts.score
+        return function(self, ctx)
+            local new_score = ctx.score + score_add
+            _log(self, "New score is " .. new_score)
+            ctx.score = new_score
+        end
+    end,
+    DENY = function()
+        return action_deny
+    end,
+    IGNORE = function()
+        return function(self)
+            _log(self, "Ingoring rule for now")
+        end
+    end,
+    SETVAR = function()
+        return function(self, ctx, collections)
+            _set_var(self, ctx, collections)
+        end
     end
 }
 _M.actions = actions
@@ -515,7 +534,7 @@ local function _parse_request_body(self, request_headers)
 			return ngx.req.get_post_args()
 		else
 			_log(self, "very large form upload, not parsing")
-			actions.DENY(self)
+            action_deny(self)
 		end
 	elseif (options._allowed_content_types[content_type_header] ~= nil) then
 		-- users can whitelist specific content types that will be passed in but not parsed
@@ -525,7 +544,7 @@ local function _parse_request_body(self, request_headers)
 		return nil
 	else
 		_log(self, tostring(content_type_header) .. " not a valid content type!")
-        actions.DENY(self)
+        action_deny(self)
 	end
 end
 
@@ -634,7 +653,6 @@ local function _process_rule(self, rule, collections, ctx)
 	local pattern = var.pattern
 
 	ctx.id = id
-	ctx.rule_score = opts.score
 
 	if (opts.setvar) then
 		ctx.rule_setvar_key = opts.setvar.key
@@ -720,9 +738,7 @@ local function _preprocess_rule(rule)
     if actions[rule.action] == nil then
        _fatal_fail("Action ".. rule.id .." does not exist for rule "..rule.id)
     end
-    rule.action_ptr = actions[rule.action]
-
-
+    rule.action_ptr = actions[rule.action](rule)
 end
 
 local function load_sets(available)
