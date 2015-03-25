@@ -552,7 +552,7 @@ local function _transform_memokey(transform)
     return table.concat(transform, ',')
 end
 
-_M.transforms = {
+local transforms = {
     base64_decode = function(self, value)
         _log(self, "Decoding from base64: " .. tostring(value))
         local t_val = ngx.decode_base64(tostring(value))
@@ -600,23 +600,21 @@ _M.transforms = {
     end
 }
 
+_M.transforms = transforms
+
 -- transform collection values based on rule opts
 -- this returns directly to _process_rule or a recursed call from multiple transforms
 local function _do_transform(self, collection, transform)
 	-- create a new tmp table to hold the transformed values
 	local t
 
-    local _transform_value = function(self, collection, transform)
-        _log(self, "doing transform of type " .. transform .. " on collection value " .. tostring(collection))
-        return self.transforms[transform](self, collection)
-    end
-
     local _transform_collection = function(self, collection, transform)
         -- if collection is a table, do multiple times, else do single
         if (type(collection) == "table") then
             _log(self, "collection is a table, recursing its transform for each element")
             for k, v in pairs(collection) do
-                t[k] = _transform_value(self, v, transform)
+                _log(self, "doing transform of type " .. transform .. " on collection value " .. tostring(v))
+                t[k] = transforms[transform](self, v)
             end
         end
     end
