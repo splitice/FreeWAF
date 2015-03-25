@@ -709,6 +709,29 @@ local function _process_rule(self, rule, collections, ctx)
 	end
 end
 
+local function load_sets(available)
+    local sets = {}
+
+    for _, v in ipairs(available) do
+        local rs = require("FreeWAF.rules." .. v)
+        sets[v] = rs.rules()
+    end
+
+    return sets
+end
+
+function _M.preload(self, sets)
+    self._sets = load_sets(sets)
+end
+
+local function rules(self)
+    if not self._sets then
+       return load_sets(self._active_rulesets)
+    end
+
+    return self._sets
+end
+
 -- main entry point
 -- data associated with a given request in kept local in scope to this function
 -- because the lua api only loads this module once, so module-level variables
@@ -762,12 +785,10 @@ function _M.exec(self)
 		BLACKLIST = function(self) return self._blacklist end,
 	}
 
-	for _, ruleset in ipairs(self._active_rulesets) do
-		_log(self, "Beginning ruleset " .. ruleset)
+	for id, ruleset in pairs(rules(self)) do
+		_log(self, "Beginning ruleset " .. id)
 
-		local rs = require("FreeWAF.rules." .. ruleset)
-
-		for __, rule in ipairs(rs.rules()) do
+		for __, rule in ipairs(ruleset) do
 			if (self._ignored_rules[rule.id] == nil) then
 				_log(self, "Beginning run of rule " .. rule.id)
 				_process_rule(self, rule, collections, ctx)
@@ -836,7 +857,8 @@ function _M.new(self)
 		_event_log_target = _M.loggers["error"](),
 		_pcre_flags = 'oij',
 		_score_threshold = 5,
-		_storage_zone = nil
+		_storage_zone = nil,
+        _sets = nil
 	}, mt)
 end
 
