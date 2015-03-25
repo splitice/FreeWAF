@@ -548,81 +548,84 @@ local function _transform_memokey(transform)
 	end
 end
 
--- transform collection values based on rule opts
-local function _do_transform(self, collection, transform)
-	local lookup = {
-		base64_decode = function(self, value)
-			_log(self, "Decoding from base64: " .. tostring(value))
-			local t_val = ngx.decode_base64(tostring(value))
-			if (t_val) then
-				_log(self, "decode successful, decoded value is " .. t_val)
-				return t_val
-			else
-				_log(self, "decode unsuccessful, returning original value " .. value)
-				return value
-			end
-		end,
-		base64_encode = function(self, value)
-			_log(self, "Encoding to base64: " .. tostring(value))
-			local t_val = ngx.encode_base64(value)
-			_log(self, "encoded value is " .. t_val)
-		end,
-		compress_whitespace = function(self, value)
-			return ngx.re.gsub(value, [=[\s+]=], ' ', self._pcre_flags)
-		end,
-		html_decode = function(self, value)
-			local str = string.gsub(value, '&lt;', '<')
-			str = string.gsub(str, '&gt;', '>')
-			str = string.gsub(str, '&quot;', '"')
-			str = string.gsub(str, '&apos;', "'")
-			str = string.gsub(str, '&#(%d+);', function(n) return string.char(n) end)
-			str = string.gsub(str, '&#x(%d+);', function(n) return string.char(tonumber(n,16)) end)
-			str = string.gsub(str, '&amp;', '&')
-			_log(self, "html decoded value is " .. str)
-			return str
-		end,
-		lowercase = function(self, value)
-			return string.lower(tostring(value))
-		end,
-		remove_comments = function(self, value)
-			return ngx.re.gsub(value, [=[\/\*(\*(?!\/)|[^\*])*\*\/]=], '', self._pcre_flags)
-		end,
-		remove_whitespace = function(self, value)
-			return ngx.re.gsub(value, [=[\s+]=], '', self._pcre_flags)
-		end,
-		replace_comments = function(self, value)
-			return ngx.re.gsub(value, [=[\/\*(\*(?!\/)|[^\*])*\*\/]=], ' ', self._pcre_flags)
-		end,
-		uri_decode = function(self, value)
-			return ngx.unescape_uri(value)
-		end,
-	}
+_M.transforms = {
+    base64_decode = function(self, value)
+        _log(self, "Decoding from base64: " .. tostring(value))
+        local t_val = ngx.decode_base64(tostring(value))
+        if (t_val) then
+            _log(self, "decode successful, decoded value is " .. t_val)
+            return t_val
+        else
+            _log(self, "decode unsuccessful, returning original value " .. value)
+            return value
+        end
+    end,
+    base64_encode = function(self, value)
+        _log(self, "Encoding to base64: " .. tostring(value))
+        local t_val = ngx.encode_base64(value)
+        _log(self, "encoded value is " .. t_val)
+    end,
+    compress_whitespace = function(self, value)
+        return ngx.re.gsub(value, [=[\s+]=], ' ', self._pcre_flags)
+    end,
+    html_decode = function(self, value)
+        local str = string.gsub(value, '&lt;', '<')
+        str = string.gsub(str, '&gt;', '>')
+        str = string.gsub(str, '&quot;', '"')
+        str = string.gsub(str, '&apos;', "'")
+        str = string.gsub(str, '&#(%d+);', function(n) return string.char(n) end)
+        str = string.gsub(str, '&#x(%d+);', function(n) return string.char(tonumber(n,16)) end)
+        str = string.gsub(str, '&amp;', '&')
+        _log(self, "html decoded value is " .. str)
+        return str
+    end,
+    lowercase = function(self, value)
+        return string.lower(tostring(value))
+    end,
+    remove_comments = function(self, value)
+        return ngx.re.gsub(value, [=[\/\*(\*(?!\/)|[^\*])*\*\/]=], '', self._pcre_flags)
+    end,
+    remove_whitespace = function(self, value)
+        return ngx.re.gsub(value, [=[\s+]=], '', self._pcre_flags)
+    end,
+    replace_comments = function(self, value)
+        return ngx.re.gsub(value, [=[\/\*(\*(?!\/)|[^\*])*\*\/]=], ' ', self._pcre_flags)
+    end,
+    uri_decode = function(self, value)
+        return ngx.unescape_uri(value)
+    end
+}
 
+-- transform collection values based on rule opts
+-- this returns directly to _process_rule or a recursed call from multiple transforms
+local function _do_transform(self, collection, transform)
 	-- create a new tmp table to hold the transformed values
 	local t = {}
 
+    local __do_transform = function(self, collection, transform)
+        -- if collection is a table, do multiple times, else do single
+        if (type(collection) == "table") then
+            _log(self, "collection is a table, recursing its transform for each element")
+            for k, v in pairs(collection) do
+                t[k] = _M.transforms[transform](self, v) -- a very small code duplication, refactor?
+            end
+        elseif (not collection) then
+            return collection -- dont transform if the collection was nil, i.e. a specific arg key dne
+        else
+            _log(self, "doing transform of type " .. transform .. " on collection value " .. tostring(collection))
+            return _M.transforms[transform](self, collection)
+        end
+    end
+
+    -- if transform is a table, do multiple times, else do single
 	if (type(transform) == "table") then
 		_log(self, "multiple transforms are defined, iterating through each one")
 		t = collection
 		for k, v in ipairs(transform) do
-			t = _do_transform(self, t, transform[k])
+			t = __do_transform(self, t, transform[k])
 		end
-	else
-		-- if the collection is a table, loop through it and add the values to the tmp table
-		-- otherwise, this returns directly to _process_rule or a recursed call from multiple transforms
-		if (type(collection) == "table") then
-			_log(self, "collection is a table, recursing its transform for each element")
-			for k, v in pairs(collection) do
-				t[k] = _do_transform(self, collection[k], transform)
-			end
-		else
-			if (not collection) then
-				return collection -- dont transform if the collection was nil, i.e. a specific arg key dne
-			end
-
-			_log(self, "doing transform of type " .. transform .. " on collection value " .. tostring(collection))
-			return lookup[transform](self, collection)
-		end
+    else
+        __do_transform(self, collection, transform)
 	end
 
 	return t
