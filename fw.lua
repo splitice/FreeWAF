@@ -710,10 +710,9 @@ local function _process_rule(self, rule, collections, ctx)
 end
 
 local function load_sets(available)
-    local sets = {}
+    local sets = new_tab(#available,0)
 
-    for i=1, #available do
-        local id = available[i]
+    for _, id in ipairs(available) do
         local rs = require("FreeWAF.rules." .. id)
         sets[id] = rs.rules()
     end
@@ -721,16 +720,16 @@ local function load_sets(available)
     return sets
 end
 
-function _M.preload(self, sets)
-    self._sets = load_sets(sets)
+function _M.preload(sets)
+    _M._sets = load_sets(sets)
 end
 
 local function rules(self)
-    if not self._sets then
+    if _M._sets == nil then
        return load_sets(self._active_rulesets)
     end
 
-    return self._sets
+    return _M._sets
 end
 
 -- main entry point
@@ -791,8 +790,7 @@ function _M.exec(self)
 	for id, ruleset in pairs(rulesets) do
 		_log(self, "Beginning ruleset " .. id)
 
-		for f=1, #ruleset do
-            local rule = ruleset[f]
+		for _, rule in ipairs(ruleset) do
 			if (self._ignored_rules[rule.id] == nil) then
 				_log(self, "Beginning run of rule " .. rule.id)
 				_process_rule(self, rule, collections, ctx)
@@ -846,6 +844,9 @@ _M.loggers = {
     end
 }
 
+-- sets can be pre-loaded into the module
+_M._sets = nil
+
 -- instantiate a new instance of the module
 function _M.new(self)
 	return setmetatable({
@@ -862,7 +863,6 @@ function _M.new(self)
 		_pcre_flags = 'oij',
 		_score_threshold = 5,
 		_storage_zone = nil,
-        _sets = nil
 	}, mt)
 end
 
